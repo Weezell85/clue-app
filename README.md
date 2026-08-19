@@ -12,3 +12,7 @@ Games accept 3–6 players. Only the host can start. One card of each category i
 Run the backend with `cd backend && mvn spring-boot:run`. Open `android/` in Android Studio and run the app; an emulator connects to the host service at `http://10.0.2.2:8080/`.
 
 The in-memory service is intentionally ephemeral for this first version.
+
+## Download a CI-built APK
+
+The **Build Android APK** GitHub Actions workflow runs when Android files change on a push or pull request, and it can also be started manually from the Actions tab. After a successful run, download the `clue-companion-debug-apk` artifact from the workflow summary. The artifact contains `app-debug.apk` and is retained for 14 days.
