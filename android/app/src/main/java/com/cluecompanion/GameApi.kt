@@ -18,11 +18,14 @@ data class GameSession(
  val code: String,
  val playerId: String,
  val status: String,
+ val phase: String,
  val players: List<GamePlayer>,
  val currentPlayerId: String?,
+ val responderId: String?,
  val winnerId: String?,
  val hand: List<GameCard>,
  val cards: List<GameCard>,
+ val suggestedCards: List<GameCard>,
  val solution: List<GameCard>,
  val events: List<String>,
 )
@@ -60,9 +63,17 @@ object GameApi {
  fun finishTurn(session: GameSession): GameSession =
   request("api/games/${session.code}/pass", "POST", playerId = session.playerId)
 
+ fun suggest(session: GameSession, suspect: GameCard, weapon: GameCard, room: GameCard): GameSession =
+  request("api/games/${session.code}/suggestions", "POST", playerId = session.playerId,
+   body = selection(suspect, weapon, room))
+
+ fun respond(session: GameSession, card: GameCard? = null): GameSession =
+  request("api/games/${session.code}/suggestions/respond", "POST", playerId = session.playerId,
+   body = JSONObject().put("card", card?.json()))
+
  fun accuse(session: GameSession, suspect: GameCard, weapon: GameCard, room: GameCard): GameSession =
   request("api/games/${session.code}/accusations", "POST", playerId = session.playerId,
-   body = JSONObject().put("suspect", suspect.json()).put("weapon", weapon.json()).put("room", room.json()))
+   body = selection(suspect, weapon, room))
 
  private fun request(
   path: String,
@@ -125,10 +136,12 @@ object GameApi {
    array.getJSONObject(index).let { GameCard(it.getString("type"), it.getString("name")) }
   } }
   val events = response.getJSONArray("events").let { array -> (0 until array.length()).map { array.getJSONObject(it).getString("message") } }
-  return GameSession(response.getString("code"), playerId, response.getString("status"), players,
-   response.optString("currentPlayerId").takeIf { it.isNotBlank() }, response.optString("winnerId").takeIf { it.isNotBlank() },
-   cards("hand"), cards("cards"), cards("solution"), events)
+  return GameSession(response.getString("code"), playerId, response.getString("status"), response.getString("phase"), players,
+   response.optString("currentPlayerId").takeIf { it.isNotBlank() }, response.optString("responderId").takeIf { it.isNotBlank() }, response.optString("winnerId").takeIf { it.isNotBlank() },
+   cards("hand"), cards("cards"), cards("suggestedCards"), cards("solution"), events)
  }
 
+ private fun selection(suspect: GameCard, weapon: GameCard, room: GameCard) =
+  JSONObject().put("suspect", suspect.json()).put("weapon", weapon.json()).put("room", room.json())
  private fun GameCard.json() = JSONObject().put("type", type).put("name", name)
 }
