@@ -8,13 +8,22 @@ data class GamePlayer(
  val id: String,
  val name: String,
  val isHost: Boolean,
+ val isEliminated: Boolean,
 )
+
+data class GameCard(val type: String, val name: String)
 
 data class GameSession(
  val code: String,
  val playerId: String,
  val status: String,
  val players: List<GamePlayer>,
+ val currentPlayerId: String?,
+ val winnerId: String?,
+ val hand: List<GameCard>,
+ val cards: List<GameCard>,
+ val solution: List<GameCard>,
+ val events: List<String>,
 )
 
 object GameApi {
@@ -29,11 +38,19 @@ object GameApi {
  fun startGame(session: GameSession): GameSession =
   request("api/games/${session.code}/start", "POST", playerId = session.playerId)
 
+ fun finishTurn(session: GameSession): GameSession =
+  request("api/games/${session.code}/pass", "POST", playerId = session.playerId)
+
+ fun accuse(session: GameSession, suspect: GameCard, weapon: GameCard, room: GameCard): GameSession =
+  request("api/games/${session.code}/accusations", "POST", playerId = session.playerId,
+   body = JSONObject().put("suspect", suspect.json()).put("weapon", weapon.json()).put("room", room.json()))
+
  private fun request(
   path: String,
   method: String,
   name: String? = null,
   playerId: String? = null,
+  body: JSONObject? = null,
  ): GameSession {
   val connection = (URL(BuildConfig.BASE_URL + path).openConnection() as HttpURLConnection).apply {
    requestMethod = method
@@ -41,16 +58,17 @@ object GameApi {
    readTimeout = 10_000
    setRequestProperty("Accept", "application/json")
    playerId?.let { setRequestProperty("X-Player-Id", it) }
-   if (name != null) {
+   if (name != null || body != null) {
     doOutput = true
     setRequestProperty("Content-Type", "application/json; charset=utf-8")
    }
   }
 
   return try {
-   name?.let { playerName ->
+   val requestBody = body ?: name?.let { JSONObject().put("name", it.trim()) }
+   requestBody?.let {
     connection.outputStream.bufferedWriter(Charsets.UTF_8).use {
-     it.write(JSONObject().put("name", playerName.trim()).toString())
+     writer -> writer.write(it.toString())
     }
    }
 
@@ -78,12 +96,20 @@ object GameApi {
   val jsonPlayers = response.getJSONArray("players")
   val players = (0 until jsonPlayers.length()).map { index ->
    jsonPlayers.getJSONObject(index).let {
-    GamePlayer(it.getString("id"), it.getString("name"), it.getBoolean("host"))
+    GamePlayer(it.getString("id"), it.getString("name"), it.getBoolean("host"), it.getBoolean("eliminated"))
    }
   }
   val playerId = knownPlayerId ?: players.first {
    it.name.equals(playerName?.trim(), ignoreCase = true)
   }.id
-  return GameSession(response.getString("code"), playerId, response.getString("status"), players)
+  fun cards(key: String) = response.getJSONArray(key).let { array -> (0 until array.length()).map { index ->
+   array.getJSONObject(index).let { GameCard(it.getString("type"), it.getString("name")) }
+  } }
+  val events = response.getJSONArray("events").let { array -> (0 until array.length()).map { array.getJSONObject(it).getString("message") } }
+  return GameSession(response.getString("code"), playerId, response.getString("status"), players,
+   response.optString("currentPlayerId").takeIf { it.isNotBlank() }, response.optString("winnerId").takeIf { it.isNotBlank() },
+   cards("hand"), cards("cards"), cards("solution"), events)
  }
+
+ private fun GameCard.json() = JSONObject().put("type", type).put("name", name)
 }
