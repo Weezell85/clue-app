@@ -5,6 +5,7 @@ import com.cluecompanion.game.*; import jakarta.validation.Valid; import jakarta
  public record NameRequest(@NotBlank String name){} public record CardDto(Card.Type type,String name){} public record Selection(CardDto suspect,CardDto weapon,CardDto room){} public record Reveal(CardDto card){}
  public record PlayerDto(UUID id,String name,boolean host,boolean eliminated,int cardCount){} public record EventDto(String message,CardDto revealedCard){}
  public record View(String code,Game.Status status,Game.Phase phase,List<PlayerDto> players,UUID currentPlayerId,UUID responderId,UUID winnerId,List<CardDto> hand,List<CardDto> cards,List<CardDto> solution,List<EventDto> events){}
+ @GetMapping public List<String> list(){return service.joinableCodes();}
  @PostMapping @ResponseStatus(HttpStatus.CREATED) public View create(@Valid @RequestBody NameRequest r){Game g=service.create(r.name());return view(g,g.players().getFirst().id());}
  @PostMapping("/{code}/players") public View join(@PathVariable String code,@Valid @RequestBody NameRequest r){Game g=service.get(code);Game.Player p=g.addPlayer(r.name());return view(g,p.id());}
  @GetMapping("/{code}") public View get(@PathVariable String code,@RequestHeader("X-Player-Id") UUID id){return view(service.get(code),id);}
