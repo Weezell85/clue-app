@@ -9,7 +9,7 @@ Games accept 3–6 players. Only the host can start. One card of each category i
 
 ## Run
 
-Run the backend with `cd backend && mvn spring-boot:run`. Open `android/` in Android Studio and run the app; an emulator connects to the host service at `http://10.0.2.2:8080/`.
+Run the backend with `cd backend && mvn spring-boot:run`. Open `android/` in Android Studio and run the app. The Android client uses `https://jubilant-doodle-4gjj5qx9pj7h7rwp-8080.app.github.dev/` as its base URL.
 
 The in-memory service is intentionally ephemeral for this first version.
 
