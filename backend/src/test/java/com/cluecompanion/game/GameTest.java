@@ -1,6 +1,7 @@
 package com.cluecompanion.game;
 import java.util.*; import org.junit.jupiter.api.Test; import static org.assertj.core.api.Assertions.*;
 class GameTest {
+ @Test void listsOnlyLobbiesWithRoomToJoin(){GameService service=new GameService();Game open=service.create("Open host");Game started=service.create("Started host");started.addPlayer("Two");started.addPlayer("Three");started.start(started.players().getFirst().id());Game full=service.create("Full host");for(int i=2;i<=6;i++)full.addPlayer("Player "+i);assertThat(service.joinableCodes()).containsExactly(open.code());}
  @Test void onlyHostCanStartWithThreePlayers(){Game g=new Game("ABCDE","Host",new Random(1));UUID host=g.players().getFirst().id();assertThatThrownBy(()->g.start(host)).hasMessageContaining("3");g.addPlayer("Two");g.addPlayer("Three");assertThatThrownBy(()->g.start(g.players().get(1).id())).hasMessageContaining("host");g.start(host);assertThat(g.status()).isEqualTo(Game.Status.PLAYING);assertThat(g.players()).extracting(p->p.hand().size()).containsOnly(6);}
  @Test void capsLobbyAtSix(){Game g=new Game("ABCDE","Host",new Random(1));for(int i=2;i<=6;i++)g.addPlayer("Player "+i);assertThatThrownBy(()->g.addPlayer("Seven")).hasMessageContaining("full");}
  @Test void passAdvancesTurnDirectlyAfterDeal(){Game g=started();UUID first=g.currentPlayer().id();g.pass(first);assertThat(g.currentPlayer().id()).isNotEqualTo(first);assertThat(g.phase()).isEqualTo(Game.Phase.ACTION);}

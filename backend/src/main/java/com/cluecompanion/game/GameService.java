@@ -4,5 +4,6 @@ import java.security.SecureRandom; import java.util.*; import java.util.concurre
  private static final String CHARS="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; private final Map<String,Game> games=new ConcurrentHashMap<>();private final SecureRandom random=new SecureRandom();
  public Game create(String name){String code;do{code=code();}while(games.containsKey(code));Game g=new Game(code,name);games.put(code,g);return g;}
  public Game get(String code){Game g=games.get(code.toUpperCase(Locale.ROOT));if(g==null)throw new GameException("Game not found");return g;}
+ public List<String> joinableCodes(){return games.values().stream().filter(g->g.status()==Game.Status.LOBBY&&g.players().size()<6).map(Game::code).sorted().toList();}
  private String code(){StringBuilder s=new StringBuilder();for(int i=0;i<5;i++)s.append(CHARS.charAt(random.nextInt(CHARS.length())));return s.toString();}
 }

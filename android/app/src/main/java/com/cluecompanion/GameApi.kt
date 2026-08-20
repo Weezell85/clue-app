@@ -2,6 +2,7 @@ package com.cluecompanion
 
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class GamePlayer(
@@ -27,6 +28,24 @@ data class GameSession(
 )
 
 object GameApi {
+ fun listGames(): List<String> {
+  val connection = (URL(BuildConfig.BASE_URL + "api/games").openConnection() as HttpURLConnection).apply {
+   requestMethod = "GET"
+   connectTimeout = 10_000
+   readTimeout = 10_000
+   setRequestProperty("Accept", "application/json")
+  }
+  return try {
+   val status = connection.responseCode
+   val responseBody = (if (status in 200..299) connection.inputStream else connection.errorStream)
+    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+   if (status !in 200..299) error("Could not load available games")
+   JSONArray(responseBody).let { games -> (0 until games.length()).map { games.getString(it) } }
+  } finally {
+   connection.disconnect()
+  }
+ }
+
  fun createGame(name: String): GameSession = request("api/games", "POST", name = name)
 
  fun joinGame(code: String, name: String): GameSession =

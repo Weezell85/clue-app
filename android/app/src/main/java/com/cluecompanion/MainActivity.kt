@@ -112,8 +112,15 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
 
 @Composable private fun LandingScreen(onGameJoined: (GameSession) -> Unit, modifier: Modifier=Modifier) {
  var name by remember { mutableStateOf("") }; var code by remember { mutableStateOf("") }
+ var availableCodes by remember { mutableStateOf(emptyList<String>()) }; var codeMenuExpanded by remember { mutableStateOf(false) }
  var isSubmitting by remember { mutableStateOf(false) }; var errorMessage by remember { mutableStateOf<String?>(null) }
  val mainHandler = remember { Handler(Looper.getMainLooper()) }
+ LaunchedEffect(Unit) {
+  while(true) {
+   runCatching { withContext(Dispatchers.IO) { GameApi.listGames() } }.onSuccess { availableCodes=it }
+   delay(5_000)
+  }
+ }
  Column(modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally) {
   AppTitle()
   Spacer(Modifier.height(42.dp))
@@ -128,7 +135,13 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
     }
     errorMessage?.let { Text(it,color=MaterialTheme.colorScheme.error) }
     Row(verticalAlignment=Alignment.CenterVertically) { HorizontalDivider(Modifier.weight(1f));Text("  OR  ",color=Cream.copy(alpha=.5f));HorizontalDivider(Modifier.weight(1f)) }
-    OutlinedTextField(code,{code=it.uppercase().take(5)},label={Text("5-letter game code")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    Box(Modifier.fillMaxWidth()) {
+     OutlinedTextField(code,{code=it.uppercase().take(5)},label={Text("5-letter game code")},placeholder={Text("Type or choose a code")},singleLine=true,modifier=Modifier.fillMaxWidth(),trailingIcon={IconButton(onClick={codeMenuExpanded=true},enabled=availableCodes.isNotEmpty()){Text("▾",fontSize=20.sp)}})
+     DropdownMenu(expanded=codeMenuExpanded,onDismissRequest={codeMenuExpanded=false},modifier=Modifier.fillMaxWidth(.82f)) {
+      if(availableCodes.isEmpty()) DropdownMenuItem(text={Text("No games available")},onClick={},enabled=false)
+      else availableCodes.forEach { gameCode -> DropdownMenuItem(text={Text(gameCode,fontWeight=FontWeight.Bold,letterSpacing=3.sp)},onClick={code=gameCode;codeMenuExpanded=false}) }
+     }
+    }
     OutlinedButton(onClick={
      submit(mainHandler, { GameApi.joinGame(code,name) }, { isSubmitting=it }, { errorMessage=it }, onGameJoined)
     },enabled=name.isNotBlank()&&code.length==5&&!isSubmitting,modifier=Modifier.fillMaxWidth().height(52.dp)) { Text("JOIN GAME",fontWeight=FontWeight.Bold) }
