@@ -7,8 +7,12 @@ import org.json.JSONObject
 data class CreatedGame(val code: String, val playerId: String)
 
 object GameApi {
- fun createGame(name: String): CreatedGame {
-  val connection = (URL(BuildConfig.BASE_URL + "api/games").openConnection() as HttpURLConnection).apply {
+ fun createGame(name: String): CreatedGame = post("api/games", name)
+
+ fun joinGame(code: String, name: String): CreatedGame = post("api/games/${code.uppercase()}/players", name)
+
+ private fun post(path: String, name: String): CreatedGame {
+  val connection = (URL(BuildConfig.BASE_URL + path).openConnection() as HttpURLConnection).apply {
    requestMethod = "POST"
    connectTimeout = 10_000
    readTimeout = 10_000
@@ -17,28 +21,30 @@ object GameApi {
    setRequestProperty("Accept", "application/json")
   }
 
-  try {
+  return try {
    connection.outputStream.bufferedWriter(Charsets.UTF_8).use {
     it.write(JSONObject().put("name", name.trim()).toString())
    }
 
-   val responseBody = (if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream)
+   val status = connection.responseCode
+   val responseBody = (if (status in 200..299) connection.inputStream else connection.errorStream)
     ?.bufferedReader()
     ?.use { it.readText() }
     .orEmpty()
 
-   if (connection.responseCode !in 200..299) {
+   if (status !in 200..299) {
     val message = runCatching { JSONObject(responseBody).optString("error") }.getOrNull()
      ?.takeIf { it.isNotBlank() }
-     ?: "The server returned HTTP ${connection.responseCode}"
+     ?: "The server returned HTTP $status"
     error(message)
    }
 
    val response = JSONObject(responseBody)
-   CreatedGame(
-    code = response.getString("code"),
-    playerId = response.getJSONArray("players").getJSONObject(0).getString("id")
-   )
+   val players = response.getJSONArray("players")
+   val player = (0 until players.length())
+    .map { players.getJSONObject(it) }
+    .first { it.getString("name").equals(name.trim(), ignoreCase = true) }
+   CreatedGame(response.getString("code"), player.getString("id"))
   } finally {
    connection.disconnect()
   }
