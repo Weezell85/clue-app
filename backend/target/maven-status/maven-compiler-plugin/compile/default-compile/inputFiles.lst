@@ -1,0 +1,8 @@
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/ClueApplication.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/api/ApiExceptionHandler.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/api/GameController.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/game/Card.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/game/Deck.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/game/Game.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/game/GameException.java
+/workspaces/clue-app/backend/src/main/java/com/cluecompanion/game/GameService.java
