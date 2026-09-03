@@ -20,6 +20,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -32,12 +36,43 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
 
 @Composable fun ClueApp() {
  var gameSession by remember { mutableStateOf<GameSession?>(null) }
+ val store=remember { SessionStore(LocalContext.current.applicationContext) }
+ var isRestoring by remember { mutableStateOf(store.load()!=null) }
+ var restoreError by remember { mutableStateOf<String?>(null) }
+ var resumeCount by remember { mutableIntStateOf(0) }
+ val lifecycleOwner=LocalLifecycleOwner.current
+
+ DisposableEffect(lifecycleOwner) {
+  val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_RESUME) resumeCount++ }
+  lifecycleOwner.lifecycle.addObserver(observer)
+  onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+ }
+ LaunchedEffect(resumeCount) {
+  val saved=store.load() ?: run { isRestoring=false;return@LaunchedEffect }
+  isRestoring=true;restoreError=null
+  runCatching { withContext(Dispatchers.IO) { GameApi.restoreGame(saved) } }
+   .onSuccess { gameSession=it;store.save(it);isRestoring=false }
+   .onFailure {
+    if(it is GameApiException && it.statusCode in listOf(401,404,409)) {
+     store.clear();gameSession=null;isRestoring=false
+    } else {
+     restoreError="Could not reconnect to your game. Check your connection and try again."
+     isRestoring=false
+    }
+   }
+ }
+ val updateSession:(GameSession)->Unit={ gameSession=it;store.save(it) }
  MaterialTheme(colorScheme=darkColorScheme(primary=Gold,background=Ink,surface=Panel,onBackground=Cream,onSurface=Cream)) {
   Box(Modifier.fillMaxSize().background(Ink).padding(24.dp)) {
-   gameSession?.let { session ->
-    if(session.status=="LOBBY") LobbyScreen(session, onSessionChanged={ gameSession=it }, modifier=Modifier.align(Alignment.Center))
-    else GameScreen(session, onSessionChanged={ gameSession=it }, modifier=Modifier.align(Alignment.Center))
-   } ?: LandingScreen(onGameJoined={ gameSession=it }, modifier=Modifier.align(Alignment.Center))
+   when {
+    isRestoring -> Column(Modifier.align(Alignment.Center),horizontalAlignment=Alignment.CenterHorizontally) { AppTitle();Spacer(Modifier.height(28.dp));CircularProgressIndicator();Spacer(Modifier.height(12.dp));Text("Restoring your game…") }
+    gameSession!=null -> gameSession!!.let { session ->
+     if(session.status=="LOBBY") LobbyScreen(session,onSessionChanged=updateSession,modifier=Modifier.align(Alignment.Center))
+     else GameScreen(session,onSessionChanged=updateSession,modifier=Modifier.align(Alignment.Center))
+    }
+    restoreError!=null -> Column(Modifier.align(Alignment.Center),horizontalAlignment=Alignment.CenterHorizontally) { AppTitle();Spacer(Modifier.height(24.dp));Text(restoreError!!,textAlign=TextAlign.Center,color=MaterialTheme.colorScheme.error);Spacer(Modifier.height(12.dp));Button({resumeCount++}){Text("TRY AGAIN")} }
+    else -> LandingScreen(onGameJoined=updateSession, modifier=Modifier.align(Alignment.Center))
+   }
   }
  }
 }
