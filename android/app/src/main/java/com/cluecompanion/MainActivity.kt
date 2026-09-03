@@ -36,7 +36,8 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
 
 @Composable fun ClueApp() {
  var gameSession by remember { mutableStateOf<GameSession?>(null) }
- val store=remember { SessionStore(LocalContext.current.applicationContext) }
+ val applicationContext=LocalContext.current.applicationContext
+ val store=remember(applicationContext) { SessionStore(applicationContext) }
  var isRestoring by remember { mutableStateOf(store.load()!=null) }
  var restoreError by remember { mutableStateOf<String?>(null) }
  var resumeCount by remember { mutableIntStateOf(0) }
