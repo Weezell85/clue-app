@@ -47,6 +47,7 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
  var confirmation by remember { mutableStateOf<String?>(null) }
  var showAccusation by remember { mutableStateOf(false) }
  var showSuggestion by remember { mutableStateOf(false) }
+ var showRoomSelection by remember { mutableStateOf(false) }
  var showMatchingCards by remember { mutableStateOf(false) }
  var notification by remember { mutableStateOf<String?>(null) }
  var observedEvents by remember(session.code,session.playerId) { mutableIntStateOf(session.events.size) }
@@ -93,8 +94,18 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
      Button({showMatchingCards=true},enabled=!isSubmitting,modifier=Modifier.weight(1f)){Text("YES")}
     }
    }
-   isMyTurn && session.phase=="ACTION" -> {
+   isMyTurn && session.phase=="ROOM" -> {
     Text("IT'S YOUR TURN",color=Gold,fontSize=22.sp,fontWeight=FontWeight.Black)
+    Spacer(Modifier.height(8.dp))
+    Text("Did you make it into a room?",textAlign=TextAlign.Center)
+    Spacer(Modifier.height(12.dp))
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+     OutlinedButton({submit(handler,{GameApi.noRoom(session)},{isSubmitting=it},{errorMessage=it},onSessionChanged)},enabled=!isSubmitting,modifier=Modifier.weight(1f)){Text("NO")}
+     Button({showRoomSelection=true},enabled=!isSubmitting,modifier=Modifier.weight(1f)){Text("YES")}
+    }
+   }
+   isMyTurn && session.phase=="ACTION" -> {
+    Text("YOU'RE IN THE ${session.turnRoom?.name?.uppercase() ?: "ROOM"}",color=Gold,fontSize=22.sp,fontWeight=FontWeight.Black,textAlign=TextAlign.Center)
     Spacer(Modifier.height(12.dp))
     Button({showSuggestion=true},enabled=!isSubmitting,modifier=Modifier.fillMaxWidth().height(52.dp)){Text("MAKE A SUGGESTION",fontWeight=FontWeight.Bold)}
    }
@@ -113,8 +124,11 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
 
  confirmation?.let { action -> AlertDialog(onDismissRequest={confirmation=null},title={Text("Are you sure?")},text={Text(if(action=="finish") "Your turn will pass to the next player." else "A final accusation cannot be changed. An incorrect accusation removes you from the turn order.")},confirmButton={TextButton(onClick={confirmation=null;if(action=="finish")submit(handler,{GameApi.finishTurn(session)},{isSubmitting=it},{errorMessage=it},onSessionChanged)else showAccusation=true}){Text("YES, I'M SURE")}},dismissButton={TextButton({confirmation=null}){Text("CANCEL")}}) }
  if(showAccusation) AccusationDialog(session.cards,onDismiss={showAccusation=false},onSubmit={suspect,weapon,room->showAccusation=false;submit(handler,{GameApi.accuse(session,suspect,weapon,room)},{isSubmitting=it},{errorMessage=it}){result->notification=result.events.lastOrNull();observedEvents=result.events.size;onSessionChanged(result)}})
- if(showSuggestion) SelectionDialog("Make a suggestion","SUBMIT SUGGESTION",session.cards,{showSuggestion=false}) { suspect,weapon,room->
-  showSuggestion=false;submit(handler,{GameApi.suggest(session,suspect,weapon,room)},{isSubmitting=it},{errorMessage=it},onSessionChanged)
+ if(showRoomSelection) CardSelectionDialog("What room did you make it into?",session.cards.filter { it.type=="ROOM" },{showRoomSelection=false}) { room ->
+  showRoomSelection=false;submit(handler,{GameApi.enterRoom(session,room)},{isSubmitting=it},{errorMessage=it},onSessionChanged)
+ }
+ if(showSuggestion) SuggestionDialog(session.cards,session.turnRoom!!,{showSuggestion=false}) { suspect,weapon->
+  showSuggestion=false;submit(handler,{GameApi.suggest(session,suspect,weapon,session.turnRoom!!)},{isSubmitting=it},{errorMessage=it},onSessionChanged)
  }
  if(showMatchingCards) {
   val matches=session.hand.filter { it in session.suggestedCards }
@@ -124,6 +138,17 @@ private val Ink=Color(0xFF101713); private val Panel=Color(0xFF1D2923); private 
   }},confirmButton={},dismissButton={TextButton({showMatchingCards=false}){Text("CANCEL")}})
  }
  notification?.let { message -> AlertDialog(onDismissRequest={notification=null},title={Text(if(session.status=="FINISHED") "Case closed" else "Game update")},text={Text(message)},confirmButton={TextButton({notification=null}){Text("OK")}}) }
+}
+
+@Composable private fun CardSelectionDialog(title:String,cards:List<GameCard>,onDismiss:()->Unit,onSelected:(GameCard)->Unit) {
+ var selected by remember { mutableStateOf<GameCard?>(null) }
+ AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={CardDropdown("Room",cards,selected){selected=it}},confirmButton={Button({onSelected(selected!!)},enabled=selected!=null){Text("CONTINUE")}},dismissButton={TextButton(onDismiss){Text("CANCEL")}})
+}
+
+@Composable private fun SuggestionDialog(cards:List<GameCard>,room:GameCard,onDismiss:()->Unit,onSubmit:(GameCard,GameCard)->Unit) {
+ val suspects=cards.filter { it.type=="SUSPECT" };val weapons=cards.filter { it.type=="WEAPON" }
+ var suspect by remember { mutableStateOf<GameCard?>(null) };var weapon by remember { mutableStateOf<GameCard?>(null) }
+ AlertDialog(onDismissRequest=onDismiss,title={Text("Make a suggestion")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)){CardDropdown("Character",suspects,suspect){suspect=it};CardDropdown("Weapon",weapons,weapon){weapon=it};Text("Room: ${room.name}",color=Gold,fontWeight=FontWeight.Bold)}},confirmButton={Button({onSubmit(suspect!!,weapon!!)},enabled=suspect!=null&&weapon!=null){Text("SUBMIT SUGGESTION")}},dismissButton={TextButton(onDismiss){Text("CANCEL")}})
 }
 
 @Composable private fun AccusationDialog(cards: List<GameCard>,onDismiss:()->Unit,onSubmit:(GameCard,GameCard,GameCard)->Unit) {
