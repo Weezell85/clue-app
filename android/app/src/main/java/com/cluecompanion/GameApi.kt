@@ -16,7 +16,9 @@ data class GameCard(val type: String, val name: String)
 
 data class GameSession(
  val code: String,
+ val playerToken: String,
  val playerId: String,
+ val playerName: String,
  val status: String,
  val phase: String,
  val players: List<GamePlayer>,
@@ -56,37 +58,42 @@ object GameApi {
   request("api/games/${code.uppercase()}/players", "POST", name = name)
 
  fun getGame(session: GameSession): GameSession =
-  request("api/games/${session.code}", "GET", playerId = session.playerId)
+  request("api/games/${session.code}", "GET", session = session)
+
+ fun restoreGame(saved: SavedGameSession): GameSession = getGame(GameSession(
+  saved.gameCode, saved.playerToken, saved.playerId, saved.playerName, "", "", emptyList(),
+  null, null, null, emptyList(), emptyList(), null, emptyList(), emptyList(), emptyList()
+ ))
 
  fun startGame(session: GameSession): GameSession =
-  request("api/games/${session.code}/start", "POST", playerId = session.playerId)
+  request("api/games/${session.code}/start", "POST", session = session)
 
  fun finishTurn(session: GameSession): GameSession =
-  request("api/games/${session.code}/pass", "POST", playerId = session.playerId)
+  request("api/games/${session.code}/pass", "POST", session = session)
 
  fun enterRoom(session: GameSession, room: GameCard): GameSession =
-  request("api/games/${session.code}/room", "POST", playerId = session.playerId, body = room.json())
+  request("api/games/${session.code}/room", "POST", session = session, body = room.json())
 
  fun noRoom(session: GameSession): GameSession =
-  request("api/games/${session.code}/no-room", "POST", playerId = session.playerId)
+  request("api/games/${session.code}/no-room", "POST", session = session)
 
  fun suggest(session: GameSession, suspect: GameCard, weapon: GameCard, room: GameCard): GameSession =
-  request("api/games/${session.code}/suggestions", "POST", playerId = session.playerId,
+  request("api/games/${session.code}/suggestions", "POST", session = session,
    body = selection(suspect, weapon, room))
 
  fun respond(session: GameSession, card: GameCard? = null): GameSession =
-  request("api/games/${session.code}/suggestions/respond", "POST", playerId = session.playerId,
+  request("api/games/${session.code}/suggestions/respond", "POST", session = session,
    body = JSONObject().put("card", card?.json()))
 
  fun accuse(session: GameSession, suspect: GameCard, weapon: GameCard, room: GameCard): GameSession =
-  request("api/games/${session.code}/accusations", "POST", playerId = session.playerId,
+  request("api/games/${session.code}/accusations", "POST", session = session,
    body = selection(suspect, weapon, room))
 
  private fun request(
   path: String,
   method: String,
   name: String? = null,
-  playerId: String? = null,
+  session: GameSession? = null,
   body: JSONObject? = null,
  ): GameSession {
   val connection = (URL(BuildConfig.BASE_URL + path).openConnection() as HttpURLConnection).apply {
@@ -94,7 +101,7 @@ object GameApi {
    connectTimeout = 10_000
    readTimeout = 10_000
    setRequestProperty("Accept", "application/json")
-   playerId?.let { setRequestProperty("X-Player-Id", it) }
+   session?.let { setRequestProperty("Authorization", "Bearer ${it.playerToken}") }
    if (name != null || body != null) {
     doOutput = true
     setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -119,16 +126,16 @@ object GameApi {
     val message = runCatching { JSONObject(responseBody).optString("error") }.getOrNull()
      ?.takeIf { it.isNotBlank() }
      ?: "The server returned HTTP $status"
-    error(message)
+    throw GameApiException(status, message)
    }
 
-   parse(responseBody, playerId, name)
+   parse(responseBody, session, name)
   } finally {
    connection.disconnect()
   }
  }
 
- private fun parse(responseBody: String, knownPlayerId: String?, playerName: String?): GameSession {
+ private fun parse(responseBody: String, knownSession: GameSession?, playerName: String?): GameSession {
   val response = JSONObject(responseBody)
   val jsonPlayers = response.getJSONArray("players")
   val players = (0 until jsonPlayers.length()).map { index ->
@@ -136,14 +143,17 @@ object GameApi {
     GamePlayer(it.getString("id"), it.getString("name"), it.getBoolean("host"), it.getBoolean("eliminated"))
    }
   }
-  val playerId = knownPlayerId ?: players.first {
+  val playerId = knownSession?.playerId ?: players.first {
    it.name.equals(playerName?.trim(), ignoreCase = true)
   }.id
   fun cards(key: String) = response.getJSONArray(key).let { array -> (0 until array.length()).map { index ->
    array.getJSONObject(index).let { GameCard(it.getString("type"), it.getString("name")) }
   } }
   val events = response.getJSONArray("events").let { array -> (0 until array.length()).map { array.getJSONObject(it).getString("message") } }
-  return GameSession(response.getString("code"), playerId, response.getString("status"), response.getString("phase"), players,
+  val me = players.first { it.id == playerId }
+  val playerToken = response.optString("playerToken").takeIf { it.isNotBlank() } ?: knownSession?.playerToken
+   ?: error("The server did not return a player token")
+  return GameSession(response.getString("code"), playerToken, playerId, me.name, response.getString("status"), response.getString("phase"), players,
    response.optString("currentPlayerId").takeIf { it.isNotBlank() }, response.optString("responderId").takeIf { it.isNotBlank() }, response.optString("winnerId").takeIf { it.isNotBlank() },
    cards("hand"), cards("cards"), response.optJSONObject("turnRoom")?.let { GameCard(it.getString("type"),it.getString("name")) }, cards("suggestedCards"), cards("solution"), events)
  }
@@ -152,3 +162,5 @@ object GameApi {
   JSONObject().put("suspect", suspect.json()).put("weapon", weapon.json()).put("room", room.json())
  private fun GameCard.json() = JSONObject().put("type", type).put("name", name)
 }
+
+class GameApiException(val statusCode: Int, message: String) : Exception(message)
