@@ -151,7 +151,7 @@ object GameApi {
   } }
   val events = response.getJSONArray("events").let { array -> (0 until array.length()).map { array.getJSONObject(it).getString("message") } }
   val me = players.first { it.id == playerId }
-  val playerToken = response.optString("playerToken").takeIf { it.isNotBlank() } ?: knownSession?.playerToken
+  val playerToken = response.optString("playerToken").takeIf { !response.isNull("playerToken") && it.isNotBlank() } ?: knownSession?.playerToken
    ?: error("The server did not return a player token")
   return GameSession(response.getString("code"), playerToken, playerId, me.name, response.getString("status"), response.getString("phase"), players,
    response.optString("currentPlayerId").takeIf { it.isNotBlank() }, response.optString("responderId").takeIf { it.isNotBlank() }, response.optString("winnerId").takeIf { it.isNotBlank() },
